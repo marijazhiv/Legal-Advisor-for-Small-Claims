@@ -1,0 +1,91 @@
+package cep
+
+import com.ftn.sbnz.model.models.Preporuka
+import com.ftn.sbnz.model.models.ZahtevPoslat
+import com.ftn.sbnz.model.models.OdgovorPrimljen
+import com.ftn.sbnz.model.models.KasnjenjeUplate
+import com.ftn.sbnz.model.models.RokZastarelosti
+import com.ftn.sbnz.model.models.DokazDodat
+import static java.util.concurrent.TimeUnit.*;
+
+declare ZahtevPoslat
+    @role(event)
+    @timestamp(timestampMillis)
+end
+
+declare OdgovorPrimljen
+    @role(event)
+    @timestamp(timestampMillis)
+end
+
+declare KasnjenjeUplate
+    @role(event)
+    @timestamp(timestampMillis)
+end
+
+declare RokZastarelosti
+    @role(event)
+    @timestamp(deadlineMillis)
+end
+
+declare DokazDodat
+    @role(event)
+    @timestamp(timestampMillis)
+end
+
+// Ako je poslat zahtev i nema odgovora 15 dana - preporuči tužbu
+rule "tuzba_nema_odgovora_15_dana"
+when
+    // hvatam svaki poslat zahtev
+    $z : ZahtevPoslat( $t1 : timestampMillis )
+
+    // proveravam da li u prvih 15 dana od zahteva nije stigao odgovor
+    not( OdgovorPrimljen(
+        timestampMillis > $t1 &&
+        timestampMillis <= $t1 + 15*24*60*60*1000
+    ) )
+then
+    // računam koliko je dana prošlo od slanja zahteva
+    long daysPassed = (System.currentTimeMillis() - $z.getTimestampMillis()) / (24*60*60*1000);
+
+    // dinamička verovatnoća: 5% po danu, max 100%
+    int probability = (int) Math.min(100, daysPassed * 5);
+
+    insert(new Preporuka(
+        "Pokreni tužbu (nema odgovora 15 dana)",
+        probability
+    ));
+end
+
+
+// Ako se kašnjenje uplate ponovi 3 puta u 30 dana - preporuči prinudnu naplatu
+rule "prinudna_naplata_triple_delay"
+when
+    $count : Number( intValue >= 3 ) from accumulate(
+        $k : KasnjenjeUplate() over window:time(30d),
+        count($k)
+    )
+then
+    insert( new Preporuka("Pokreni postupak prinudne naplate (3 kašnjenja u 30 dana)", 85) );
+end
+
+// Ako je rok zastarelosti blizu isteka (< 7 dana) - upozorenje
+rule "upozorenje_zastarelost"
+when
+    $r : RokZastarelosti() over window:time(7d)
+then
+    insert( new Preporuka("Upozorenje: Rok zastarelosti ističe uskoro!", 20) );
+end
+
+// Ako se u roku od 24h doda više dokaza - preporuka za veći uspeh spora
+rule "dokazi_blizu_vremenski"
+when
+    $d1 : DokazDodat( $t1 : timestampMillis )
+    $d2 : DokazDodat( $t2 : timestampMillis, this != $d1 )
+    eval( $t2 - $t1 <= 24*60*60*1000 )
+then
+    insert( new Preporuka("Uspeh spora +10% (više dokaza u 24h)", 10) );
+end
+
+
+

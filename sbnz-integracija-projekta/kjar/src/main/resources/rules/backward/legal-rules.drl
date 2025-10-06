@@ -1,0 +1,40 @@
+package backward;
+dialect "java"
+import com.ftn.sbnz.model.models.Preporuka
+import com.ftn.sbnz.model.models.Spor
+import com.ftn.sbnz.model.models.Preporuka
+import com.ftn.sbnz.model.models.Spor
+
+rule "nagodba_mali_iznos"
+when
+    $s : Spor(tip in ("faktura","ugovor","šteta"), iznos < 1000)
+then
+    Preporuka p = new Preporuka("Preporučena nagodba",
+        Math.min(60 + ($s.getIznos() > 500 ? 10 : 0) + ($s.isRokIstekao() ? 5 : 0), 100)
+    );
+    insert(p);
+    System.out.println("Pravilo 'nagodba_mali_iznos' aktivirano -> " + p);
+end
+
+rule "tuzba_veliki_iznos_dokazi"
+when
+    $s : Spor(tip in ("faktura","ugovor","usluga"), iznos >= 1000, dokaziDostupni == true, rokIstekao == true)
+then
+    Preporuka p = new Preporuka("Preporučeno podnošenje tužbe",
+        Math.min(50 + ($s.isDokaziDostupni() ? 20 : 0) + ($s.isRokIstekao() ? 10 : 0), 100)
+    );
+    insert(p);
+    System.out.println("Pravilo 'tuzba_veliki_iznos_dokazi' aktivirano -> " + p);
+end
+
+rule "formalni_zahtev"
+salience 10
+when
+    $s : Spor(tip == "neplacena potrazivanja", isFormalniZahtevPoslat() == false)
+then
+    Preporuka p = new Preporuka("Preporučeno slanje formalnog zahteva", 70);
+    insert(p);
+    System.out.println("Pravilo 'formalni_zahtev' aktivirano -> " + p);
+end
+
+
