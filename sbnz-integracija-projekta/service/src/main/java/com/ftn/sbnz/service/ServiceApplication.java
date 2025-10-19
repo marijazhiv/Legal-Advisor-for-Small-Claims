@@ -52,6 +52,7 @@ package com.ftn.sbnz.service;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Optional;
 
 import com.ftn.sbnz.model.models.*;
 import org.kie.api.KieServices;
@@ -106,7 +107,7 @@ public class ServiceApplication implements CommandLineRunner {
 		bwSession.insert(spor3);
 
 		int firedBW = bwSession.fireAllRules();
-		log.info("Broj aktiviranih BW pravila: {}", firedBW);
+		log.info("Broj aktiviranih BW pravila: {}", Optional.of(firedBW));
 
 		bwSession.dispose();
 
@@ -130,7 +131,7 @@ public class ServiceApplication implements CommandLineRunner {
 		cepSession.insert(d2);
 
 		int firedCEP = cepSession.fireAllRules();
-		log.info("Broj aktiviranih CEP pravila: {}", firedCEP);
+		log.info("Broj aktiviranih CEP pravila: {}", Optional.of(firedCEP));
 
 		cepSession.dispose();
 	}

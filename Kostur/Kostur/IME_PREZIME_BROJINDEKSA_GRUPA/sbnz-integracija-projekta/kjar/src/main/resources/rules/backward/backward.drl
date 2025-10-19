@@ -1,0 +1,331 @@
+package backward;
+dialect "java"
+import com.ftn.sbnz.model.models.Preporuka
+import com.ftn.sbnz.model.models.Spor
+import com.ftn.sbnz.model.models.SubPreporuka
+import com.ftn.sbnz.model.models.ZahtevPoslat;
+import com.ftn.sbnz.model.models.OdgovorPrimljen;
+import com.ftn.sbnz.model.models.KasnjenjeUplate;
+import com.ftn.sbnz.model.models.RokZastarelosti;
+import com.ftn.sbnz.model.models.DokazDodat;
+
+import static java.util.concurrent.TimeUnit.*;
+
+
+declare ZahtevPoslat @role(event) @timestamp(timestampMillis) end
+declare OdgovorPrimljen @role(event) @timestamp(timestampMillis) end
+declare KasnjenjeUplate @role(event) @timestamp(timestampMillis) end
+declare RokZastarelosti @role(event) @timestamp(deadlineMillis) end
+declare DokazDodat @role(event) @timestamp(timestampMillis) end
+
+//rule "nagodba_mali_iznos"
+//when
+//    $s : Spor(tip in ("faktura","ugovor","šteta"), iznos < 1000)
+//then
+//    Preporuka p = new Preporuka("Preporučena nagodba",
+//        Math.min(60 + ($s.getIznos() > 500 ? 10 : 0) + ($s.isRokIstekao() ? 5 : 0), 100)
+//    );
+//    insert(p);
+//    System.out.println("Pravilo 'nagodba_mali_iznos' aktivirano -> " + p);
+//end
+rule "nagodba_mali_iznos"
+when
+    $s : Spor(tip in ("faktura","ugovor","šteta"), iznos < 1000, dokaziDostupni == true)
+then
+    Preporuka p = new Preporuka("Preporucena nagodba. Kod malih iznosa i postojanja dokaza, sudski postupak cesto: traje duze nego sto sam iznos vredi, kosta vise nego sto se moze naplatiti,iscrpljuje obe strane. Zato je nagodba najracionalnija opcija.",
+        Math.min(60 + ($s.getIznos() > 500 ? 10 : 0) + ($s.isRokIstekao() ? 5 : 0), 100)
+    );
+    insert(p);
+    System.out.println("Pravilo 'nagodba_mali_iznos' aktivirano -> " + p);
+end
+
+//rule "tuzba_veliki_iznos_dokazi"
+//when
+//    $s : Spor(tip in ("faktura","ugovor","usluga"), iznos >= 1000, dokaziDostupni == true, rokIstekao == true)
+//then
+//    Preporuka p = new Preporuka("Preporuceno podnosenje tuzbe",
+//        Math.min(50 + ($s.isDokaziDostupni() ? 20 : 0) + ($s.isRokIstekao() ? 10 : 0), 100)
+//    );
+//    insert(p);
+//    System.out.println("Pravilo 'tuzba_veliki_iznos_dokazi' aktivirano -> " + p);
+//end
+
+rule "tuzba_veliki_iznos_dokazi"
+when
+    $s : Spor(
+        tip in ("faktura","ugovor","usluga"),
+        iznos >= 1000,
+        dokaziDostupni == true
+    )
+then
+    Preporuka p = new Preporuka(
+        "Preporuceno podnosenje tuzbe",
+        Math.min(
+            65
+            + ($s.isSvedokPrisutan() ? 20 : 0)
+            + ($s.isRokIstekao() ? 10 : 0),
+            100
+        )
+    );
+
+    insert(p);
+    System.out.println("Dokazi: " + $s.isDokaziDostupni() + ", Rok: " + $s.isRokIstekao() + ", Svedok: " + $s.isSvedokPrisutan());
+    System.out.println("Pravilo 'tuzba_veliki_iznos_dokazi' aktivirano -> " + p);
+end
+
+
+rule "formalni_zahtev"
+salience 10
+when
+    $s : Spor(tip == "neplacena potrazivanja", isFormalniZahtevPoslat() == false)
+then
+    Preporuka p = new Preporuka("Preporučeno slanje formalnog zahteva", 70);
+    insert(p);
+    System.out.println("Pravilo 'formalni_zahtev' aktivirano -> " + p);
+end
+
+rule "odustati_od_spora"
+when
+    $s : Spor(tip in ("mali_iznos","sporni_slucaj"), iznos < 1000) // primer kriterijuma
+then
+    Preporuka p = new Preporuka("Odustati od spora", 20); // niska verovatnoća uspeha
+    insert(p);
+    System.out.println("Pravilo 'odustati_od_spora' aktivirano -> " + p);
+end
+
+rule "nagodba_bez_dokaza"
+when
+    $s : Spor(tip in ("faktura","ugovor","šteta"), iznos < 1000, dokaziDostupni == false)
+then
+    Preporuka p = new Preporuka("Preporucena nagodba jer se radi o malom iznosu i slaboj dokaznoj osnovi.",
+        Math.min(70 + ($s.getIznos() > 500 ? 10 : 0) + ($s.isRokIstekao() ? 5 : 0), 100)
+    );
+    insert(p);
+    System.out.println("Pravilo 'nagodba_bez_dokaza' aktivirano -> " + p);
+end
+
+//rule "postupak_bez_dokaza_iznad_1000"
+//when
+//    $s : Spor(tip in ("faktura","ugovor","šteta"), iznos >= 1000, dokaziDostupni == false)
+//then
+//    Preporuka p = new Preporuka("Preporučeno prikupljanje dokaza pre nagodbe",
+//        Math.min(40 + ($s.isRokIstekao() ? 5 : 0), 100)
+//    );
+//    insert(p);
+//    System.out.println("Pravilo 'postupak_bez_dokaza_iznad_1000' aktivirano -> " + p);
+//end
+
+
+
+// 1. Pravilo za male iznose sporova (template)
+//rule "Mali iznos - nagodba"
+//when
+//    $s : Spor( (tip == "faktura" || tip == "ugovor" || tip == "steta") && iznos < 1000 )
+//then
+//    Preporuka p = new Preporuka("nagodba", 80);
+//    insert(p);
+//    System.out.println("Preporuka: nagodba za mali iznos");
+//end
+
+// 2. Pravilo za veće iznose sa dokazima i isteklim rokom
+//rule "Veliki iznos - podnošenje tužbe"
+//when
+//    $s : Spor( (tip == "faktura" || tip == "ugovor" || tip == "usluga")
+//                && iznos >= 1000
+//                && dokaziDostupni == true
+//                && rokIstekao == true )
+//then
+//    Preporuka p = new Preporuka("tužba", 90);
+//    insert(p);
+//    System.out.println("Preporuka: tužba za veći iznos sa dokazima");
+//end
+
+// 3. Pravilo za kašnjenje izvršenja usluge
+rule "Kašnjenje usluge - podsudno obaveštenje"
+when
+    $s : Spor( (tip == "kasnjenje_usluge" || tip == "neizvrsena_obaveza")
+                && dokaziDostupni == true )
+then
+    Preporuka p = new Preporuka("Vi kao stranka imate cvrste dokaze, ali druga strana kasni sa izvrsenjem, stoga preporucujemo PODSUDNO OBAVESTENJE druge strane o povredi ugovorne obaveze.", 70);
+    insert(p);
+    System.out.println("Preporuka: podsudno obavestenje");
+end
+
+//rule "Kašnjenje usluge - podsudno obaveštenje"
+//when
+//    $s : Spor( (tip == "kasnjenje_usluge" || tip == "neizvrsena_obaveza")
+//                && dokaziDostupni == true )
+//then
+//    Preporuka p = new Preporuka(
+//        "Vi kao stranka imate cvrste dokaze, ali druga strana kasni sa izvrsenjem, " +
+//        "stoga preporucujemo PODSUDNO OBAVESTENJE druge strane o povredi ugovorne obaveze.",
+//        Math.min(70 + ($s.isRokIstekao() ? 5 : 0), 100)
+//    );
+//    insert(p);
+//    System.out.println("Pravilo 'Kašnjenje usluge - podsudno obaveštenje' aktivirano -> " + p);
+//end
+
+// 4. Nedovoljno dokaza - prikupljanje dokaza
+rule "Nedovoljno dokaza - preporuka prikupljanja"
+when
+    $s : Spor( dokaziDostupni == false )
+then
+    Preporuka p = new Preporuka("preporucuje se prikupljanje dokaza pre bilo kog drugog daljeg koraka, nagodbe ili tuzbe.", 60);
+    insert(p);
+    System.out.println("Preporuka: prikupljanje dokaza pre koraka");
+end
+
+
+
+//farward
+
+//rule "pravilo_1_dokazi"
+//when
+//    $s : Spor($brojDokaza : brojDokaza)
+//then
+//    double bonus = $brojDokaza * 10; // svaki dokaz +10%
+//    $s.setVerovatnoca($s.getVerovatnoca() + bonus);
+//    System.out.println("Dodato " + $brojDokaza + " dokaza, verovatnoca = " + $s.getVerovatnoca() + "%");
+//end
+
+rule "pravilo_2_svedok"
+when
+    $s : Spor(svedokPrisutan == true)
+then
+    $s.setVerovatnoca($s.getVerovatnoca() + 20); // svedok +20%
+    update($s); // ovo je ključno
+    System.out.println("Svedok prisutan, verovatnoca = " + $s.getVerovatnoca() + "%");
+end
+
+rule "pravilo_3_presedan"
+when
+    $s : Spor(pozitivanPresedan == true)
+then
+    $s.setVerovatnoca($s.getVerovatnoca() + 30); // pozitivan presedan +30%
+    update($s); // ključno
+    System.out.println("Pozitivan presedan, verovatnoca = " + $s.getVerovatnoca() + "%");
+end
+
+rule "ukupna_verovatnoca"
+when
+    $s: Spor()
+then
+    $s.setVerovatnoca(
+        ($s.isDokaziDostupni() ? 10 : 0) +
+        ($s.isSvedokPrisutan() ? 20 : 0) +
+        ($s.isPozitivanPresedan() ? 30 : 0)
+    );
+    System.out.println("Ukupna verovatnoca = " + $s.getVerovatnoca());
+end
+
+
+//
+
+
+
+// --------------------
+// Sub-pravilo: proveri svedoka
+//rule "bonus_svedok"
+//when
+//    $s : Spor(svedokPrisutan == true)
+//then
+//    insert(new SubPreporuka("Svedok prisutan", 20));
+//end
+
+// Sub-pravilo: proveri dokaze
+//rule "bonus_dokazi"
+//when
+//    $s : Spor(dokaziDostupni == true)
+//then
+//    insert(new SubPreporuka("Dokazi dostupni", 15));
+//end
+
+// Sub-pravilo: rok istekao
+//rule "bonus_rok"
+//when
+//    $s : Spor(rokIstekao == true)
+//then
+//    insert(new SubPreporuka("Rok istekao", 10));
+//end
+//
+//// Sub-pravilo: pozitivan presedan
+//rule "bonus_presedan"
+//when
+//    $s : Spor(pozitivanPresedan == true)
+//then
+//    insert(new SubPreporuka("Pozitivan presedan", 5));
+//end
+//
+//// Glavno pravilo: rekurzivno agregira sve bonus-e
+//rule "tuzba_aggregated"
+//when
+//    $s : Spor(tip in ("faktura","ugovor","usluga"))
+//    $ukupno : Number() from accumulate(
+//        $sp : SubPreporuka(),
+//        sum($sp.getBonus())
+//    )
+//then
+//    // ograničavamo maksimalno na 100
+//    int verovatnoca = Math.min($ukupno.intValue(), 100);
+//
+//    Preporuka p = new Preporuka("Preporuceno podnosenje tuzbe (recursively)", verovatnoca);
+//    insert(p);
+//    System.out.println("Pravilo 'tuzba_aggregated' aktivirano -> " + p);
+//end
+
+
+// ----------------- CEP PRAVILA (dinamičko povećanje verovatnoće) -----------------
+
+// Ako se u roku od 24h doda više dokaza, povećava se verovatnoća spora
+rule "dokazi_blizu_vremenski"
+when
+    $d1 : DokazDodat( $t1 : timestampMillis )
+    $d2 : DokazDodat( $t2 : timestampMillis, this != $d1 )
+    eval(Math.abs($t2 - $t1) <= 24*60*60*1000)
+    $p : Preporuka( akcija matches ".*(nagodba|tuzba|Podsudno).*" )
+then
+    $p.setProcenatUspeha(Math.min(100, $p.getProcenatUspeha() + 10));
+    update($p); // obavezno da Drools prepozna izmenu
+    System.out.println("Ažurirana verovatnoća zbog novih dokaza: " + $p);
+end
+
+
+// Ako je rok zastarelosti blizu (<7 dana) - povećava se verovatnoća
+rule "upozorenje_zastarelost"
+when
+    $r : RokZastarelosti() over window:time(7d)
+    $p : Preporuka()  // hvata sve već insertovane preporuke
+then
+    $p.setProcenatUspeha(Math.min(100, $p.getProcenatUspeha() + 20));
+    update($p);  // obavezno pozovi update da se promena registruje
+    System.out.println("Ažurirana verovatnoća zbog bliskog roka zastarelosti: " + $p);
+end
+
+
+// Ako je poslat zahtev i nema odgovora 15-25 dana - povećava verovatnoću tužbe
+rule "tuzba_nema_odgovora_25_dana"
+when
+    $z : ZahtevPoslat( $t1 : timestampMillis )
+    not( OdgovorPrimljen(timestampMillis > $t1 && timestampMillis <= $t1 + 25*24*60*60*1000) )
+    $p : Preporuka( akcija contains "tuzba" )
+then
+    long daysPassed = (System.currentTimeMillis() - $z.getTimestampMillis()) / (24*60*60*1000);
+    $p.setProcenatUspeha((int)Math.min(100, $p.getProcenatUspeha() + daysPassed * 5));
+    update($p);
+    System.out.println("Ažurirana verovatnoća zbog nedostatka odgovora: " + $p);
+end
+
+
+// Ako se kašnjenje uplate ponovi 3 puta u 30 dana - povećava se verovatnoća prinudne naplate
+rule "prinudna_naplata_triple_delay"
+when
+    $count : Number(intValue >= 3) from accumulate(
+        $k : KasnjenjeUplate() over window:time(30d),
+        count($k)
+    )
+    $p : Preporuka( akcija contains "prinudna naplata" )
+then
+    $p.setProcenatUspeha(Math.min(100, 85));
+    update($p);
+    System.out.println("Ažurirana verovatnoća zbog kašnjenja uplate: " + $p);
+end
