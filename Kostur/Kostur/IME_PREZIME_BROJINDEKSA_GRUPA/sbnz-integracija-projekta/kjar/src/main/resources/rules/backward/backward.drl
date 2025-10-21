@@ -170,7 +170,7 @@ rule "Nedovoljno dokaza - preporuka prikupljanja"
 when
     $s : Spor( dokaziDostupni == false )
 then
-    Preporuka p = new Preporuka("preporucuje se prikupljanje dokaza pre bilo kog drugog daljeg koraka, nagodbe ili tuzbe.", 60);
+    Preporuka p = new Preporuka("preporucuje se prikupljanje dokaza pre bilo kog drugog daljeg koraka, nagodbe ili tuzbe.", 90);
     insert(p);
     System.out.println("Preporuka: prikupljanje dokaza pre koraka");
 end

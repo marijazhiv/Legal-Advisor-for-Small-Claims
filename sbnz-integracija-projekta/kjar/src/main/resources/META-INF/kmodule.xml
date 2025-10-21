@@ -1,8 +1,0 @@
-<kmodule xmlns="http://jboss.org/kie/6.0.0/kmodule">
-    <kbase name="bwBase" packages="backward" default="true">
-        <ksession name="bwKsession" default="true"/>
-    </kbase>
-    <kbase name="cepBase" packages="cep" eventProcessingMode="stream">
-        <ksession name="cepKsession" type="stateful"/>
-    </kbase>
-</kmodule>

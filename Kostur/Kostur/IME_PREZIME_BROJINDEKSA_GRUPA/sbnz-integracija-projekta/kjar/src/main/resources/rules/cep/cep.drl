@@ -52,7 +52,7 @@ then
     int probability = (int) Math.min(100, daysPassed * 5);
 
     insert(new Preporuka(
-        "Pokreni tužbu (nema odgovora 15 dana)",
+        "Pokreni tuzbu (nema odgovora 15 dana)",
         probability
     ));
 end
@@ -66,7 +66,7 @@ when
         count($k)
     )
 then
-    insert( new Preporuka("Pokreni postupak prinudne naplate (3 kašnjenja u 30 dana)", 85) );
+    insert( new Preporuka("Pokreni postupak prinudne naplate (3 kasnjenja u 30 dana)", 85) );
 end
 
 // Ako je rok zastarelosti blizu isteka (< 7 dana) - upozorenje
@@ -74,7 +74,7 @@ rule "upozorenje_zastarelost"
 when
     $r : RokZastarelosti() over window:time(7d)
 then
-    insert( new Preporuka("Upozorenje: Rok zastarelosti ističe uskoro!", 20) );
+    insert( new Preporuka("Upozorenje: Rok zastarelosti istice uskoro!", 20) );
 end
 
 // Ako se u roku od 24h doda više dokaza - preporuka za veći uspeh spora
